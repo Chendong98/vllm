@@ -13,10 +13,10 @@ from vllm.model_executor import set_random_seed
 from vllm.platforms import current_platform
 from vllm.sequence import SequenceGroupMetadata
 from vllm.worker.cache_engine import CacheEngine
+from vllm.worker.embedding_model_runner import EmbeddingModelRunner
 from vllm.worker.enc_dec_model_runner import EncoderDecoderModelRunner
 from vllm.worker.model_runner import GPUModelRunnerBase
 from vllm.worker.npu_model_runner import NPUModelRunner
-from vllm.worker.pooling_model_runner import PoolingModelRunner
 from vllm.worker.worker import Worker
 from vllm.worker.worker_base import WorkerBase
 
@@ -39,13 +39,6 @@ class NPUWorker(Worker):
     ) -> None:
 
         WorkerBase.__init__(self, vllm_config=vllm_config)
-
-        # super.__init__(self, vllm_config=vllm_config,
-        #                local_rank=local_rank,
-        #                rank=rank,
-        #                distributed_init_method=distributed_init_method,
-        #                is_driver_worker=is_driver_worker,
-        #                model_runner_cls=model_runner_cls)
 
         self.parallel_config.rank = rank
         self.local_rank = local_rank
@@ -74,8 +67,10 @@ class NPUWorker(Worker):
                     else {"return_hidden_states": True}
 
         ModelRunnerClass: Type[GPUModelRunnerBase] = NPUModelRunner
-        if model_config.runner_type == "pooling":
-            ModelRunnerClass = PoolingModelRunner
+        if model_runner_cls is not None:
+            ModelRunnerClass = model_runner_cls
+        elif model_config.task == "embedding":
+            ModelRunnerClass = EmbeddingModelRunner
         elif self.model_config.is_encoder_decoder:
             ModelRunnerClass = EncoderDecoderModelRunner
         self.model_runner: GPUModelRunnerBase = ModelRunnerClass(
@@ -84,8 +79,6 @@ class NPUWorker(Worker):
             is_driver_worker=is_driver_worker,
             **speculative_args,
         )
-        if model_runner_cls is not None:
-            self.model_runner = model_runner_cls(self.model_runner)
 
         # Uninitialized cache engine. Will be initialized by
         # initialize_cache.

@@ -9,7 +9,7 @@ from vllm.logger import init_logger
 from vllm.lora.layers import LoRAMapping
 from vllm.lora.request import LoRARequest
 from vllm.model_executor import SamplingMetadata
-from vllm.multimodal import MultiModalKwargs
+from vllm.multimodal import MultiModalInputs
 from vllm.platforms import current_platform
 from vllm.prompt_adapter.layers import PromptAdapterMapping
 from vllm.prompt_adapter.request import PromptAdapterRequest
@@ -198,7 +198,7 @@ class ModelInputForNPUBuilder(ModelInputForGPUBuilder):
             data.multi_modal_kwargs for data in self.inter_data_list
             if data.multi_modal_kwargs is not None
         ]
-        multi_modal_kwargs = MultiModalKwargs.batch(multi_modal_kwargs_list)
+        multi_modal_kwargs = MultiModalInputs.batch(multi_modal_kwargs_list)
 
         return self.model_input_cls(
             input_tokens=input_tokens_tensor,

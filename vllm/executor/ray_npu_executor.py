@@ -9,7 +9,7 @@ from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayGPUExecutorAsync
 from vllm.executor.ray_utils import RayWorkerWrapper, ray
 from vllm.logger import init_logger
 from vllm.utils import (get_distributed_init_method, get_ip, get_open_port,
-                        make_async)
+                        get_vllm_instance_id, make_async)
 
 if ray is not None:
     from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -116,14 +116,8 @@ class RayNPUExecutor(RayGPUExecutor, NPUExecutor):
         self.workers = sorted(self.workers, key=sort_by_driver_then_worker_ip)
 
         # Get the set of GPU IDs used on each node.
-        worker_node_and_gpu_ids = []
-        for worker in [self.driver_dummy_worker] + self.workers:
-            if worker is None:
-                # driver_dummy_worker can be None when using ray spmd worker.
-                continue
-            worker_node_and_gpu_ids.append(
-                ray.get(worker.get_node_and_accelerator_ids.remote()) \
-            ) # type: ignore
+        worker_node_and_gpu_ids = self._run_workers(
+            "get_node_and_accelerator_ids", use_dummy_driver=True)
 
         node_workers = defaultdict(list)  # node id -> list of worker ranks
         node_npus = defaultdict(list)  # node id -> list of gpu ids
@@ -154,10 +148,14 @@ class RayNPUExecutor(RayGPUExecutor, NPUExecutor):
                 "`HOST_IP` environment variable, make sure it is unique for"
                 " each node.")
 
+        VLLM_INSTANCE_ID = get_vllm_instance_id()
+
         # Set environment variables for the driver and workers.
         all_args_to_update_environment_variables = [({
             "ASCEND_RT_VISIBLE_DEVICES":
             ",".join(map(str, node_npus[node_id])),
+            "VLLM_INSTANCE_ID":
+            VLLM_INSTANCE_ID,
             "VLLM_TRACE_FUNCTION":
             str(envs.VLLM_TRACE_FUNCTION),
         }, ) for (node_id, _) in worker_node_and_gpu_ids]
